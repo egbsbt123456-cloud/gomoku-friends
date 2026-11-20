@@ -1,0 +1,316 @@
+<!doctype html>
+<!-- 棋盘 SVG 源自 HullQin/gobang (MIT)，见 LICENSE。平台整合新增规则校验及三种对局模式。 -->
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>五子棋</title><style>
+/* ===== 主站设计令牌（与 示例主站 一致） ===== */
+html { font-family: Inter, "Microsoft YaHei", sans-serif; font-synthesis: none; }
+body {
+  height: 100%; margin: 0;
+  background: #f8f7f2;             /* 主站米白底 */
+  color: #223b34;                  /* 主站正文色 */
+  font-family: Inter, "Microsoft YaHei", sans-serif;
+  display: flex; flex-direction: column;
+  box-sizing: border-box;
+}
+* { box-sizing: border-box; }
+button { font: inherit; cursor: pointer; }
+button:focus-visible, a:focus-visible { outline: 3px solid #d29f41; outline-offset: 5px; }
+a { color: inherit; text-decoration: none; }
+
+/* ---- 主站 play-header（照搬 sweeper-page 三列头部） ---- */
+.play-header {
+  flex: none;
+  height: 76px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  border-bottom: 1px solid #e2e4dc;
+  padding: 0 28px;
+  background: #f8f7f2;
+}
+.back { font-size: 13px; color: #788477; justify-self: start; }
+.play-header h1 {
+  font-size: 21px; line-height: 1.3; letter-spacing: 0;
+  font-weight: 750; white-space: nowrap; margin: 0;
+}
+.play-header h1 > .glyph { color: #426850; font-size: 25px; margin-right: 6px; }
+.play-header h1 small { font-size: 10px; font-weight: 400; color: #859080; margin-left: 4px; }
+.header-side { justify-self: end; font-size: 12px; display: flex; align-items: center; gap: 10px; }
+
+/* ---- 连接状态（照搬主站 .connection：7px 圆点 + 12px 文案） ---- */
+.connection { font-size: 12px; color: #6d786e; display: flex; gap: 7px; align-items: center; }
+.connection i { width: 7px; height: 7px; border-radius: 50%; background: #9b9d94; }
+.connection i.online { background: #4b8064; }
+
+/* ---- 按钮（照搬主站 AccountPanel：#f8faf5 底 #264f40 字） ---- */
+.plain-btn {
+  border: 1px solid #bcc9bd; border-radius: 5px;
+  background: #f8faf5; color: #264f40;
+  padding: 9px 12px; font-size: 13px;
+}
+.plain-btn:hover { background: #eef1e7; }
+.plain-btn:disabled { opacity: .5; cursor: wait; }
+
+/* ---- 提示条（照搬主站 .notice：#f0f3e9 底 #496047 字 7px 圆角） ---- */
+.message {
+  position: fixed; top: 92px; left: 0; z-index: 1010;
+  width: 100%; pointer-events: none; text-align: center;
+  margin: 0; padding: 0; list-style: none;
+}
+.message > div { padding: 6px; }
+.message > div > div {
+  display: inline-block;
+  padding: 12px 18px;
+  background: #f0f3e9;
+  border: 1px solid #d6dfcd;
+  border-radius: 7px;
+  box-shadow: 0 3px 7px #2d51381c;
+  color: #496047;
+  font-size: 12px; line-height: 1.8;
+  font-variant-numeric: tabular-nums;
+  pointer-events: all;
+}
+
+/* ---- 棋盘（原版布局，仅容器化适配头部） ---- */
+.board-wrap { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 18px 12px; }
+#svg { height: 100%; width: 100%; max-width: min(92vmin, 640px); }
+
+@media (max-width: 600px) {
+  .play-header { height: 62px; padding: 0 14px; gap: 5px; }
+  .play-header h1 { font-size: 18px; }
+  .play-header h1 small { display: none; }
+  .back { font-size: 12px; }
+  .message { top: 70px; }
+  .board-wrap { padding: 10px 6px; }
+}
+
+body{height:auto;min-height:100vh}.play-header{height:auto;min-height:58px;display:flex;gap:12px;padding:12px 20px;justify-content:space-between;flex-wrap:wrap}.play-header .controls{display:flex;gap:8px}.board-wrap{flex:none;padding:14px 12px}#svg{display:block;width:min(100%,640px);height:auto;max-width:640px;aspect-ratio:1;margin:auto;touch-action:manipulation}.game-status{text-align:center;margin:4px 14px 12px;color:#496047;font-size:13px}.rule-note{color:#808570;text-align:center;font-size:11px;margin:8px 12px 20px}.game-status.over{color:#926741;font-weight:700}#modeLabel{font-size:13px;color:#69786d}.message{top:68px}button[hidden]{display:none}@media(max-width:600px){.play-header{padding:10px 12px;gap:8px}.plain-btn{font-size:12px;padding:7px 10px}.board-wrap{padding:12px 6px}}
+
+/* 木色棋盘与墨绿主站搭配；规则和落子坐标保持不变。 */
+.board-wrap{padding:20px 14px 18px}#svg{border-radius:14px;filter:drop-shadow(0 12px 18px #74542e21) drop-shadow(0 2px 3px #74542e1c)}
+#svg>rect:last-child{fill:#bc5e48;stroke:#fff9ed;stroke-width:.3;rx:.35}
+@media(max-width:600px){.board-wrap{padding:16px 8px}#svg{border-radius:9px;filter:drop-shadow(0 6px 10px #74542e26)}}
+</style></head><body>
+<header class="play-header"><span id="modeLabel">五子棋</span><div class="controls"><button id="newGame" class="plain-btn">重新开局</button><button id="undo" class="plain-btn">悔棋</button></div></header>
+<div class="board-wrap">    <svg id="svg" viewBox="-80 -80 160 160" xmlns="http://www.w3.org/2000/svg" aria-label="木色五子棋盘">
+      <defs>
+        <linearGradient id="board-rim" x2=".3" y2="1"><stop stop-color="#c5a174"/><stop offset=".48" stop-color="#a77d4f"/><stop offset="1" stop-color="#bd9564"/></linearGradient>
+        <linearGradient id="board-wood" x2=".7" y2="1"><stop stop-color="#f0d9ae"/><stop offset=".5" stop-color="#e7c794"/><stop offset="1" stop-color="#dcb77d"/></linearGradient>
+        <pattern id="wood-grain" width="160" height="16" patternUnits="userSpaceOnUse"><path d="M-5 3 Q30 0 65 4 T165 3 M-5 8 Q35 13 80 9 T165 8 M-5 14 Q48 10 100 14 T165 14" fill="none" stroke="#a07742" stroke-width=".16" opacity=".22"/></pattern>
+        <radialGradient id="black" cx="32%" cy="26%" r="76%"><stop stop-color="#727976"/><stop offset=".28" stop-color="#343b37"/><stop offset=".7" stop-color="#161d19"/><stop offset="1" stop-color="#080e0b"/></radialGradient>
+        <radialGradient id="white" cx="32%" cy="24%" r="80%"><stop stop-color="#fffefb"/><stop offset=".5" stop-color="#f9f8f1"/><stop offset=".85" stop-color="#e0dfd3"/><stop offset="1" stop-color="#c4c4b7"/></radialGradient>
+        <filter id="stone-shadow" x="-35%" y="-35%" width="180%" height="190%"><feDropShadow dx=".15" dy=".48" stdDeviation=".34" flood-color="#49321e" flood-opacity=".32"/></filter>
+        <circle id="piece" r="4.2" filter="url(#stone-shadow)"/>
+      </defs>
+      <g pointer-events="none">
+        <rect x="-79.3" y="-79.3" width="158.6" height="158.6" rx="3.5" fill="url(#board-rim)" stroke="#ab8253" stroke-width=".25"/>
+        <rect x="-77.4" y="-77.4" width="154.8" height="154.8" rx="2" fill="url(#board-wood)" stroke="#f8e4bf" stroke-width=".35"/>
+        <rect x="-77.1" y="-77.1" width="154.2" height="154.2" rx="1.8" fill="url(#wood-grain)"/>
+        <rect x="-71" y="-71" width="142" height="142" fill="none" stroke="#997446" stroke-width=".15" opacity=".65"/>
+        <path d="M-70 -70V70M-70 -70H70 M-60 -70V70M-70 -60H70 M-50 -70V70M-70 -50H70 M-40 -70V70M-70 -40H70 M-30 -70V70M-70 -30H70 M-20 -70V70M-70 -20H70 M-10 -70V70M-70 -10H70 M0 -70V70M-70 0H70 M10 -70V70M-70 10H70 M20 -70V70M-70 20H70 M30 -70V70M-70 30H70 M40 -70V70M-70 40H70 M50 -70V70M-70 50H70 M60 -70V70M-70 60H70 M70 -70V70M-70 70H70" fill="none" stroke="#79613f" stroke-width=".28"/>
+        <circle cx="0" cy="0" r=".72" fill="#6a5031"/>
+        <circle cx="40" cy="40" r=".72" fill="#6a5031"/>
+        <circle cx="40" cy="-40" r=".72" fill="#6a5031"/>
+        <circle cx="-40" cy="40" r=".72" fill="#6a5031"/>
+        <circle cx="-40" cy="-40" r=".72" fill="#6a5031"/>
+        <text x="-70" y="-73.2" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">A</text>
+        <text x="-74" y="-69.25" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">1</text>
+        <text x="-60" y="-73.2" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">B</text>
+        <text x="-74" y="-59.25" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">2</text>
+        <text x="-50" y="-73.2" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">C</text>
+        <text x="-74" y="-49.25" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">3</text>
+        <text x="-40" y="-73.2" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">D</text>
+        <text x="-74" y="-39.25" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">4</text>
+        <text x="-30" y="-73.2" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">E</text>
+        <text x="-74" y="-29.25" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">5</text>
+        <text x="-20" y="-73.2" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">F</text>
+        <text x="-74" y="-19.25" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">6</text>
+        <text x="-10" y="-73.2" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">G</text>
+        <text x="-74" y="-9.25" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">7</text>
+        <text x="0" y="-73.2" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">H</text>
+        <text x="-74" y="0.75" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">8</text>
+        <text x="10" y="-73.2" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">I</text>
+        <text x="-74" y="10.75" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">9</text>
+        <text x="20" y="-73.2" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">J</text>
+        <text x="-74" y="20.75" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">10</text>
+        <text x="30" y="-73.2" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">K</text>
+        <text x="-74" y="30.75" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">11</text>
+        <text x="40" y="-73.2" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">L</text>
+        <text x="-74" y="40.75" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">12</text>
+        <text x="50" y="-73.2" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">M</text>
+        <text x="-74" y="50.75" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">13</text>
+        <text x="60" y="-73.2" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">N</text>
+        <text x="-74" y="60.75" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">14</text>
+        <text x="70" y="-73.2" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">O</text>
+        <text x="-74" y="70.75" text-anchor="middle" fill="#87683e" font-family="system-ui" font-size="2.1">15</text>
+      </g>
+    </svg></div><p id="status" class="game-status" role="status">黑棋先行</p><p class="rule-note">15 × 15 · 自由五子棋，无禁手 · 连成五子或以上获胜</p><div id="message" class="message" aria-live="polite"></div>
+<script>try{window.__GOMOKU_WORKER_URL__=URL.createObjectURL(new Blob(["/* 15×15 自由五子棋。坐标 board[x][y]；不含禁手，连续至少五颗获胜。 */\n(function(root){\n  'use strict';\n  var SIZE=15, directions=[[1,0],[0,1],[1,1],[1,-1]];\n  function inside(x,y){return Number.isInteger(x)&&Number.isInteger(y)&&x>=0&&x<SIZE&&y>=0&&y<SIZE;}\n  function other(side){return side==='b'?'w':'b';}\n  function initial(){return {board:Array.from({length:SIZE},function(){return Array(SIZE).fill(null);}),turn:'b',over:false,winner:null,reason:null,version:0,moves:0,lastMove:null,winningLine:[]};}\n  function line(board,x,y,side){\n    for(var d of directions){\n      var run=[{x:x,y:y}];\n      for(var sign of [-1,1]){\n        for(var n=1;n<SIZE;n++){\n          var nx=x+d[0]*n*sign,ny=y+d[1]*n*sign;\n          if(!inside(nx,ny)||board[nx][ny]!==side)break;\n          run.push({x:nx,y:ny});\n        }\n      }\n      if(run.length>=5)return run;\n    }\n    return [];\n  }\n  function apply(state,side,move){\n    if(!state||!Array.isArray(state.board)||state.board.length!==SIZE||!state.board.every(function(row){return Array.isArray(row)&&row.length===SIZE&&row.every(function(v){return v===null||v==='b'||v==='w';});})||!['b','w'].includes(state.turn)||!Number.isInteger(state.version)||state.version<0||!Number.isInteger(state.moves)||state.moves<0||state.moves>225)return {ok:false,code:'BAD_STATE'};\n    if(state.over)return {ok:false,code:'GAME_OVER'};\n    if(side!==state.turn)return {ok:false,code:'NOT_YOUR_TURN'};\n    if(!move||!inside(move.x,move.y))return {ok:false,code:'BAD_COORDS'};\n    if(state.board[move.x][move.y]!==null)return {ok:false,code:'OCCUPIED'};\n    var board=state.board.map(function(row){return row.slice();});board[move.x][move.y]=side;\n    var win=line(board,move.x,move.y,side),moves=state.moves+1,draw=!win.length&&moves===SIZE*SIZE;\n    return {ok:true,state:{board:board,turn:other(side),over:win.length>0||draw,winner:win.length?side:null,reason:win.length?'five':draw?'draw':null,version:state.version+1,moves:moves,lastMove:{x:move.x,y:move.y},winningLine:win}};\n  }\n  function candidates(board){\n    var found=new Set(),occupied=false;\n    for(var x=0;x<SIZE;x++)for(var y=0;y<SIZE;y++)if(board[x][y]){\n      occupied=true;\n      for(var dx=-2;dx<=2;dx++)for(var dy=-2;dy<=2;dy++)if(inside(x+dx,y+dy)&&!board[x+dx][y+dy])found.add((x+dx)*SIZE+y+dy);\n    }\n    if(!occupied)return [{x:7,y:7}];\n    return Array.from(found,function(n){return {x:Math.floor(n/SIZE),y:n%SIZE};});\n  }\n  function winsAt(board,m,side){\n    board[m.x][m.y]=side;\n    try{return line(board,m.x,m.y,side).length>0;}finally{board[m.x][m.y]=null;}\n  }\n  function value(board,m,side){\n    var score=0,weights=[0,8,100,1800,40000,1000000];\n    for(var d of directions){\n      var count=1,open=0;\n      for(var sign of [-1,1]){\n        var n=1;\n        while(inside(m.x+d[0]*n*sign,m.y+d[1]*n*sign)&&board[m.x+d[0]*n*sign][m.y+d[1]*n*sign]===side){count++;n++;}\n        var nx=m.x+d[0]*n*sign,ny=m.y+d[1]*n*sign;\n        if(inside(nx,ny)&&!board[nx][ny])open++;\n      }\n      if(open||count>=5)score+=weights[Math.min(count,5)]*(open===2?3:1);\n    }\n    return score;\n  }\n  function bestMove(state,side){\n    if(!state||state.over||state.turn!==side)return null;\n    var board=state.board.map(function(row){return row.slice();}),moves=candidates(board),enemy=other(side);\n    for(var m of moves)if(winsAt(board,m,side))return m;\n    for(var m of moves)if(winsAt(board,m,enemy))return m;\n    var best=null,bestScore=-Infinity;\n    for(var m of moves){\n      var score=value(board,m,side)+value(board,m,enemy)*1.15-(Math.abs(m.x-7)+Math.abs(m.y-7));\n      if(score>bestScore){bestScore=score;best=m;}\n    }\n    return best;\n  }\n  var api={createInitialState:initial,safeApplyMove:apply,bestMove:bestMove,winningLine:line};\n  if(typeof module!=='undefined'&&module.exports)module.exports=api;\n  root.Gomoku=api;\n})(typeof window!=='undefined'?window:globalThis);\n\n'use strict';\n\nself.onmessage=function(event){\n  var job=event.data;\n  try{self.postMessage({id:job.id,version:job.state.version,move:self.Gomoku.bestMove(job.state,'w')});}\n  catch(error){self.postMessage({id:job.id,error:true});}\n};\n"],{type:"text/javascript"}));window.addEventListener("unload",()=>URL.revokeObjectURL(window.__GOMOKU_WORKER_URL__));}catch(error){}
+/* 15×15 自由五子棋。坐标 board[x][y]；不含禁手，连续至少五颗获胜。 */
+(function(root){
+  'use strict';
+  var SIZE=15, directions=[[1,0],[0,1],[1,1],[1,-1]];
+  function inside(x,y){return Number.isInteger(x)&&Number.isInteger(y)&&x>=0&&x<SIZE&&y>=0&&y<SIZE;}
+  function other(side){return side==='b'?'w':'b';}
+  function initial(){return {board:Array.from({length:SIZE},function(){return Array(SIZE).fill(null);}),turn:'b',over:false,winner:null,reason:null,version:0,moves:0,lastMove:null,winningLine:[]};}
+  function line(board,x,y,side){
+    for(var d of directions){
+      var run=[{x:x,y:y}];
+      for(var sign of [-1,1]){
+        for(var n=1;n<SIZE;n++){
+          var nx=x+d[0]*n*sign,ny=y+d[1]*n*sign;
+          if(!inside(nx,ny)||board[nx][ny]!==side)break;
+          run.push({x:nx,y:ny});
+        }
+      }
+      if(run.length>=5)return run;
+    }
+    return [];
+  }
+  function apply(state,side,move){
+    if(!state||!Array.isArray(state.board)||state.board.length!==SIZE||!state.board.every(function(row){return Array.isArray(row)&&row.length===SIZE&&row.every(function(v){return v===null||v==='b'||v==='w';});})||!['b','w'].includes(state.turn)||!Number.isInteger(state.version)||state.version<0||!Number.isInteger(state.moves)||state.moves<0||state.moves>225)return {ok:false,code:'BAD_STATE'};
+    if(state.over)return {ok:false,code:'GAME_OVER'};
+    if(side!==state.turn)return {ok:false,code:'NOT_YOUR_TURN'};
+    if(!move||!inside(move.x,move.y))return {ok:false,code:'BAD_COORDS'};
+    if(state.board[move.x][move.y]!==null)return {ok:false,code:'OCCUPIED'};
+    var board=state.board.map(function(row){return row.slice();});board[move.x][move.y]=side;
+    var win=line(board,move.x,move.y,side),moves=state.moves+1,draw=!win.length&&moves===SIZE*SIZE;
+    return {ok:true,state:{board:board,turn:other(side),over:win.length>0||draw,winner:win.length?side:null,reason:win.length?'five':draw?'draw':null,version:state.version+1,moves:moves,lastMove:{x:move.x,y:move.y},winningLine:win}};
+  }
+  function candidates(board){
+    var found=new Set(),occupied=false;
+    for(var x=0;x<SIZE;x++)for(var y=0;y<SIZE;y++)if(board[x][y]){
+      occupied=true;
+      for(var dx=-2;dx<=2;dx++)for(var dy=-2;dy<=2;dy++)if(inside(x+dx,y+dy)&&!board[x+dx][y+dy])found.add((x+dx)*SIZE+y+dy);
+    }
+    if(!occupied)return [{x:7,y:7}];
+    return Array.from(found,function(n){return {x:Math.floor(n/SIZE),y:n%SIZE};});
+  }
+  function winsAt(board,m,side){
+    board[m.x][m.y]=side;
+    try{return line(board,m.x,m.y,side).length>0;}finally{board[m.x][m.y]=null;}
+  }
+  function value(board,m,side){
+    var score=0,weights=[0,8,100,1800,40000,1000000];
+    for(var d of directions){
+      var count=1,open=0;
+      for(var sign of [-1,1]){
+        var n=1;
+        while(inside(m.x+d[0]*n*sign,m.y+d[1]*n*sign)&&board[m.x+d[0]*n*sign][m.y+d[1]*n*sign]===side){count++;n++;}
+        var nx=m.x+d[0]*n*sign,ny=m.y+d[1]*n*sign;
+        if(inside(nx,ny)&&!board[nx][ny])open++;
+      }
+      if(open||count>=5)score+=weights[Math.min(count,5)]*(open===2?3:1);
+    }
+    return score;
+  }
+  function bestMove(state,side){
+    if(!state||state.over||state.turn!==side)return null;
+    var board=state.board.map(function(row){return row.slice();}),moves=candidates(board),enemy=other(side);
+    for(var m of moves)if(winsAt(board,m,side))return m;
+    for(var m of moves)if(winsAt(board,m,enemy))return m;
+    var best=null,bestScore=-Infinity;
+    for(var m of moves){
+      var score=value(board,m,side)+value(board,m,enemy)*1.15-(Math.abs(m.x-7)+Math.abs(m.y-7));
+      if(score>bestScore){bestScore=score;best=m;}
+    }
+    return best;
+  }
+  var api={createInitialState:initial,safeApplyMove:apply,bestMove:bestMove,winningLine:line};
+  if(typeof module!=='undefined'&&module.exports)module.exports=api;
+  root.Gomoku=api;
+})(typeof window!=='undefined'?window:globalThis);
+</script><script>(function(){
+  'use strict';
+  var E=window.Gomoku,mode=new URLSearchParams(window.location.search).get('mode')||'ai';
+  if(!['ai','local','online'].includes(mode))mode='ai';
+  var svg=document.getElementById('svg'),status=document.getElementById('status'),cells=[],mark=document.createElementNS('http://www.w3.org/2000/svg','rect');
+  var state=E.createInitialState(),history=[],thinking=false,pending=false,side=null,ready=false,roomCode=null;
+  var epoch=0,timer=null,watchdog=null,worker=null;
+  function canPlay(){return !state.over&&!thinking&&!pending&&(mode==='local'||(mode==='ai'&&state.turn==='b')||(mode==='online'&&ready&&state.turn===side));}
+  function parentMessage(type,data){window.parent.postMessage({channel:'boardgame:gomoku',type:type,data:data},window.location.origin);}
+  function cellName(x,y){return String.fromCharCode(65+x)+(y+1);}
+  for(let x=0;x<15;x++){
+    cells[x]=[];
+    for(let y=0;y<15;y++){
+      var cell=document.createElementNS('http://www.w3.org/2000/svg','use');cells[x][y]=cell;
+      cell.setAttribute('href','#piece');cell.setAttribute('x',x*10-70);cell.setAttribute('y',y*10-70);cell.setAttribute('fill-opacity','0');
+      cell.setAttribute('data-x',x);cell.setAttribute('data-y',y);cell.setAttribute('aria-label',cellName(x,y));
+      cell.addEventListener('mouseenter',function(){if(canPlay()&&!state.board[x][y]){cells[x][y].setAttribute('fill',state.turn==='b'?'url(#black)':'url(#white)');cells[x][y].setAttribute('fill-opacity','0.5');}});
+      cell.addEventListener('mouseleave',function(){if(!state.board[x][y])cells[x][y].setAttribute('fill-opacity','0');});
+      cell.addEventListener('click',function(){play({x:x,y:y});});svg.appendChild(cell);
+    }
+  }
+  mark.setAttribute('fill','red');mark.setAttribute('width','2');mark.setAttribute('height','2');mark.setAttribute('opacity','0');mark.setAttribute('pointer-events','none');svg.appendChild(mark);
+  function render(){
+    for(var x=0;x<15;x++)for(var y=0;y<15;y++){
+      var stone=state.board[x][y],cell=cells[x][y];cell.setAttribute('fill-opacity',stone?'1':'0');
+      cell.setAttribute('fill',stone==='b'?'url(#black)':'url(#white)');
+      cell.setAttribute('aria-label',cellName(x,y)+(stone?stone==='b'?'，黑棋':'，白棋':'，空位'));
+    }
+    mark.setAttribute('opacity',state.lastMove?'0.7':'0');
+    if(state.lastMove){mark.setAttribute('x',state.lastMove.x*10-71);mark.setAttribute('y',state.lastMove.y*10-71);}
+    status.classList.toggle('over',state.over);
+    var text=state.over?(state.reason==='cancelled'?'房间已取消':state.winner?(state.winner==='b'?'黑棋':'白棋')+'获胜'+(state.reason==='resign'?' · 对方认输':''):'本局和棋'):thinking?'电脑思考中…':(state.turn==='b'?'黑棋':'白棋')+'行棋';
+    if(mode==='online'&&!ready&&!state.over)text=roomCode?'等待好友加入':'等待房间同步…';
+    status.textContent=text+' · 共 '+state.moves+' 手';
+    document.getElementById('undo').disabled=!history.length||mode==='online';
+  }
+  function stopAI(){epoch++;clearTimeout(timer);clearTimeout(watchdog);if(worker)worker.terminate();worker=null;timer=null;watchdog=null;thinking=false;}
+  function commit(move){
+    var result=E.safeApplyMove(state,state.turn,move);if(!result.ok)return false;
+    history.push({move:move,mover:state.turn,turnBefore:state.turn});state=result.state;render();return true;
+  }
+  function scheduleAI(){
+    if(mode!=='ai'||state.over||state.turn!=='w')return;
+    thinking=true;var id=++epoch,version=state.version;render();
+    function current(){return id===epoch&&state.version===version&&!state.over&&state.turn==='w';}
+    function finish(move){
+      if(!current())return;
+      clearTimeout(watchdog);if(worker)worker.terminate();worker=null;thinking=false;
+      if(!move||!commit(move)){var fallback=E.bestMove(state,'w');if(fallback)commit(fallback);else render();}
+    }
+    function fallback(){if(current())finish(E.bestMove(state,'w'));}
+    timer=setTimeout(function(){
+      if(!current())return;
+      try{
+        if(typeof window.Worker!=='function'){fallback();return;}
+        worker=new window.Worker(window.__GOMOKU_WORKER_URL__ || 'ai-worker.js?v=1');
+        worker.onmessage=function(e){if(e.data.id!==id)return;if(e.data.error)fallback();else if(e.data.version===version)finish(e.data.move);};
+        worker.onerror=function(e){if(e.preventDefault)e.preventDefault();fallback();};worker.onmessageerror=fallback;
+        watchdog=setTimeout(fallback,1500);worker.postMessage({id:id,state:state});
+      }catch(error){fallback();}
+    },100);
+  }
+  function play(move){
+    if(!canPlay())return;
+    if(mode==='online'){
+      if(!E.safeApplyMove(state,side,move).ok)return;
+      pending=true;parentMessage('move',{move:move,expectedVersion:state.version});return;
+    }
+    if(commit(move))scheduleAI();
+  }
+  function reset(){if(mode==='online')return;stopAI();state=E.createInitialState();history=[];pending=false;render();}
+  function undo(){
+    if(mode==='online'||!history.length)return;stopAI();
+    var steps=mode==='local'?1:state.turn==='w'?1:2;
+    history=history.slice(0,Math.max(0,history.length-steps));state=E.createInitialState();
+    for(var h of history)state=E.safeApplyMove(state,state.turn,h.move).state;
+    render();
+  }
+  document.getElementById('newGame').addEventListener('click',reset);document.getElementById('undo').addEventListener('click',undo);
+  document.getElementById('modeLabel').textContent=mode==='ai'?'人机对战 · 你执黑':mode==='local'?'本地双人 · 黑白轮流':'好友同玩';
+  if(mode==='online'){
+    document.getElementById('newGame').hidden=true;document.getElementById('undo').hidden=true;
+    window.addEventListener('message',function(event){
+      if(event.source!==window.parent||event.origin!==window.location.origin||event.data?.channel!=='boardgame:gomoku:control')return;
+      var room=event.data.room;if(!room||!room.state||!Array.isArray(room.history))return;
+      if(roomCode===room.code&&state.version>room.state.version)return;
+      if(roomCode===room.code&&state.version===room.state.version&&!pending)return;
+      roomCode=room.code;side=room.yourSide;ready=room.status==='playing';state=room.state;history=room.history;pending=false;render();
+    });
+    parentMessage('ready',{});
+  }
+  window.addEventListener('pagehide',stopAI);render();svg.setAttribute('data-ready','true');
+  if(window.__GOMOKU_TEST_MODE__)window.__GOMOKU_TEST__={getState:function(){return state;},getHistory:function(){return history;},play:play,reset:reset,undo:undo};
+})();
+</script></body></html>

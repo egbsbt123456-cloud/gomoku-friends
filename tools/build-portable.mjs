@@ -1,0 +1,11 @@
+import {readFile,writeFile,mkdir} from 'node:fs/promises';
+const root=new URL('../',import.meta.url),source=new URL('apps/web/public/gomoku/',root);
+const read=name=>readFile(new URL(name,source),'utf8');
+const safe=text=>text.replace(/<\/script/gi,'<\\/script');
+let html=await read('index.html');const engine=await read('engine.js');
+const worker=engine+'\n'+(await read('ai-worker.js')).replace("importScripts('engine.js');",'');
+const setup='try{window.__GOMOKU_WORKER_URL__=URL.createObjectURL(new Blob(['+JSON.stringify(worker)+'],{type:"text/javascript"}));window.addEventListener("unload",()=>URL.revokeObjectURL(window.__GOMOKU_WORKER_URL__));}catch(error){}';
+const app=(await read('app.js')).replace("new window.Worker('ai-worker.js?v=1')","new window.Worker(window.__GOMOKU_WORKER_URL__ || 'ai-worker.js?v=1')");
+html=html.replace('<script src="engine.js?v=1"></script>','<script>'+safe(setup+'\n'+engine)+'</script>').replace('<script src="app.js?v=1"></script>','<script>'+safe(app)+'</script>');
+if(/<script[^>]+src=/.test(html))throw Error('Unexpected external script');
+await mkdir(new URL('portable/',root),{recursive:true});await writeFile(new URL('portable/五子棋-直接打开.html',root),html);console.log('Built offline single file');
